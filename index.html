@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Powered Weekly Timetable</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .timetable-grid {
+            position: relative; /* Needed for the time indicator positioning */
+            display: grid;
+            grid-template-columns: 60px repeat(7, 1fr);
+            grid-template-rows: 40px repeat(18, 50px);
+            gap: 2px;
+        }
+        .time-slot {
+            grid-column: 1 / 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        .day-header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            background-color: #f3f4f6;
+            border-radius: 6px;
+        }
+        .schedule-item {
+            border-radius: 8px;
+            padding: 8px;
+            color: white;
+            font-size: 12px;
+            line-height: 1.2;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .schedule-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .item-title {
+            font-weight: 600;
+            font-size: 13px;
+        }
+        .item-details {
+            font-size: 11px;
+            opacity: 0.9;
+        }
+        /* Modal Styles */
+        .modal {
+            transition: opacity 0.3s ease;
+        }
+        .modal-content {
+            transition: transform 0.3s ease;
+        }
+        /* Spinner */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Tab Styles */
+        .tab-button {
+            transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-button.active {
+            border-color: #4f46e5;
+            color: #4f46e5;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">Your AI-Powered Weekly Schedule</h1>
+            <p class="text-md text-gray-600 mt-2">Click on a study or programming block to generate a plan!</p>
+        </header>
+
+        <div class="flex flex-wrap justify-center gap-2 md:gap-4 mb-8">
+            <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-sky-500 mr-2"></span> College Classes</div>
+            <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-indigo-500 mr-2"></span> College Study</div>
+            <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-emerald-500 mr-2"></span> Programming</div>
+            <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-orange-500 mr-2"></span> Commute</div>
+            <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-amber-400 mr-2"></span> Meals & Breaks</div>
+            <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-slate-400 mr-2"></span> Wind Down</div>
+            <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-slate-700 mr-2"></span> Sleep</div>
+            <div class="flex items-center"><span class="w-4 h-4 rounded-full bg-rose-400 mr-2"></span> Free/Flex Time</div>
+        </div>
+
+        <div class="mb-8 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+            <div class="flex justify-between items-center border-b pb-3 mb-3">
+                <div class="flex space-x-4">
+                    <button id="urgentTab" class="tab-button active px-1 py-2 text-sm font-semibold">Urgent Assignments</button>
+                    <button id="allTab" class="tab-button px-1 py-2 text-sm font-semibold">All Assignments</button>
+                </div>
+                <button id="openAddAssignmentModalBtn" class="bg-indigo-600 text-white font-bold py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                    + Add Assignment
+                </button>
+            </div>
+            <div id="assignmentsContent" class="min-h-[100px] max-h-48 overflow-y-auto">
+                </div>
+        </div>
+
+
+        <div class="timetable-grid bg-white p-2 rounded-lg shadow-lg overflow-x-auto">
+            <div class="time-slot" style="grid-row: 1 / 2;"></div>
+            <div class="day-header" style="grid-column: 2 / 3;">Mon</div>
+            <div class="day-header" style="grid-column: 3 / 4;">Tue</div>
+            <div class="day-header" style="grid-column: 4 / 5;">Wed</div>
+            <div class="day-header" style="grid-column: 5 / 6;">Thu</div>
+            <div class="day-header" style="grid-column: 6 / 7;">Fri</div>
+            <div class="day-header" style="grid-column: 7 / 8;">Sat</div>
+            <div class="day-header" style="grid-column: 8 / 9;">Sun</div>
+
+            <script>
+                const grid = document.querySelector('.timetable-grid');
+                for (let i = 0; i < 18; i++) {
+                    const time = (i + 6).toString().padStart(2, '0') + ':00';
+                    const timeSlot = document.createElement('div');
+                    timeSlot.className = 'time-slot';
+                    timeSlot.style.gridRow = `${i + 2} / ${i + 3}`;
+                    timeSlot.textContent = time;
+                    grid.appendChild(timeSlot);
+                }
+            </script>
+            
+            <div class="schedule-item bg-amber-400" style="grid-column: 2; grid-row: 2 / 3;"><span class="item-title">Wake Up</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 2; grid-row: 3 / 4;" data-type="study"><span class="item-title">Study</span><span class="item-details">1h Session</span></div>
+            <div class="schedule-item bg-orange-500" style="grid-column: 2; grid-row: 4 / 5;"><span class="item-title">Commute</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 2; grid-row: 5 / 7;"><span class="item-title">AC101 (L)</span><span class="item-details">Applied Chemistry</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 2; grid-row: 7 / 8;"><span class="item-title">AP101 (L)</span><span class="item-details">Physics</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 2; grid-row: 8 / 10;"><span class="item-title">Lunch Break</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 2; grid-row: 10 / 12;"><span class="item-title">SEC-1 (Lab)</span><span class="item-details">Eng. Physics Workshop</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 2; grid-row: 12 / 13;"><span class="item-title">AM101 (T)</span><span class="item-details">Mathematics-I</span></div>
+            <div class="schedule-item bg-orange-500" style="grid-column: 2; grid-row: 13 / 14;"><span class="item-title">Commute</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 2; grid-row: 14 / 15;"><span class="item-title">Dinner</span></div>
+            <div class="schedule-item bg-emerald-500" style="grid-column: 2; grid-row: 15 / 17;" data-type="programming"><span class="item-title">Programming</span><span class="item-details">2h Session</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 2; grid-row: 17 / 18;" data-type="study"><span class="item-title">Study</span><span class="item-details">1h Session</span></div>
+            <div class="schedule-item bg-slate-400" style="grid-column: 2; grid-row: 18 / 19;"><span class="item-title">Wind Down</span></div>
+            <div class="schedule-item bg-slate-700" style="grid-column: 2; grid-row: 19 / 20;"><span class="item-title">Sleep</span></div>
+            
+            <div class="schedule-item bg-amber-400" style="grid-column: 3; grid-row: 2 / 3;"><span class="item-title">Wake Up</span></div>
+            <div class="schedule-item bg-emerald-500" style="grid-column: 3; grid-row: 3 / 5;" data-type="programming"><span class="item-title">Programming</span><span class="item-details">2h Session</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 3; grid-row: 5 / 6;" data-type="study"><span class="item-title">Study</span><span class="item-details">1h Session</span></div>
+            <div class="schedule-item bg-orange-500" style="grid-column: 3; grid-row: 6 / 7;"><span class="item-title">Commute</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 3; grid-row: 7 / 9;"><span class="item-title">AP101 (L)</span><span class="item-details">Physics</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 3; grid-row: 9 / 10;"><span class="item-title">Lunch</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 3; grid-row: 10 / 12;"><span class="item-title">EE105 (L)</span><span class="item-details">Basic Electrical Eng-II</span></div>
+            <div class="schedule-item bg-orange-500" style="grid-column: 3; grid-row: 12 / 13;"><span class="item-title">Commute</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 3; grid-row: 13 / 14;"><span class="item-title">Break</span></div>
+            <div class="schedule-item bg-emerald-500" style="grid-column: 3; grid-row: 14 / 16;" data-type="programming"><span class="item-title">Programming</span><span class="item-details">2h Session</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 3; grid-row: 16 / 17;"><span class="item-title">Dinner</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 3; grid-row: 17 / 18;" data-type="study"><span class="item-title">Study</span><span class="item-details">1h Session</span></div>
+            <div class="schedule-item bg-slate-400" style="grid-column: 3; grid-row: 18 / 19;"><span class="item-title">Wind Down</span></div>
+            <div class="schedule-item bg-slate-700" style="grid-column: 3; grid-row: 19 / 20;"><span class="item-title">Sleep</span></div>
+
+            <div class="schedule-item bg-amber-400" style="grid-column: 4; grid-row: 2 / 3;"><span class="item-title">Wake Up</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 4; grid-row: 3 / 5;" data-type="study"><span class="item-title">Study</span><span class="item-details">2h Session</span></div>
+            <div class="schedule-item bg-emerald-500" style="grid-column: 4; grid-row: 5 / 7;" data-type="programming"><span class="item-title">Programming</span><span class="item-details">2h Session</span></div>
+            <div class="schedule-item bg-orange-500" style="grid-column: 4; grid-row: 7 / 8;"><span class="item-title">Commute</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 4; grid-row: 8 / 9;"><span class="item-title">EE105 (L)</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 4; grid-row: 9 / 10;"><span class="item-title">AM101 (L)</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 4; grid-row: 10 / 11;"><span class="item-title">Lunch</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 4; grid-row: 11 / 12;"><span class="item-title">SEC-1</span></div>
+            <div class="schedule-item bg-orange-500" style="grid-column: 4; grid-row: 12 / 13;"><span class="item-title">Commute</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 4; grid-row: 13 / 14;"><span class="item-title">Dinner</span></div>
+            <div class="schedule-item bg-emerald-500" style="grid-column: 4; grid-row: 14 / 16;" data-type="programming"><span class="item-title">Programming</span><span class="item-details">2h Session</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 4; grid-row: 16 / 18;" data-type="study"><span class="item-title">Study</span><span class="item-details">2h Session</span></div>
+            <div class="schedule-item bg-slate-400" style="grid-column: 4; grid-row: 18 / 19;"><span class="item-title">Wind Down</span></div>
+            <div class="schedule-item bg-slate-700" style="grid-column: 4; grid-row: 19 / 20;"><span class="item-title">Sleep</span></div>
+
+            <div class="schedule-item bg-amber-400" style="grid-column: 5; grid-row: 2 / 3;"><span class="item-title">Wake Up</span></div>
+            <div class="schedule-item bg-orange-500" style="grid-column: 5; grid-row: 3 / 4;"><span class="item-title">Commute</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 5; grid-row: 4 / 6;"><span class="item-title">AEC/VAC</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 5; grid-row: 6 / 8;"><span class="item-title">AC101 (Lab)</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 5; grid-row: 8 / 10;"><span class="item-title">Lunch Break</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 5; grid-row: 10 / 12;"><span class="item-title">EE105 (Lab)</span></div>
+            <div class="schedule-item bg-orange-500" style="grid-column: 5; grid-row: 12 / 13;"><span class="item-title">Commute</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 5; grid-row: 13 / 14;"><span class="item-title">Dinner</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 5; grid-row: 14 / 16;" data-type="study"><span class="item-title">Study</span><span class="item-details">2h Session</span></div>
+            <div class="schedule-item bg-emerald-500" style="grid-column: 5; grid-row: 16 / 18;" data-type="programming"><span class="item-title">Programming</span><span class="item-details">2h Session</span></div>
+            <div class="schedule-item bg-slate-400" style="grid-column: 5; grid-row: 18 / 19;"><span class="item-title">Wind Down</span></div>
+            <div class="schedule-item bg-slate-700" style="grid-column: 5; grid-row: 19 / 20;"><span class="item-title">Sleep</span></div>
+
+            <div class="schedule-item bg-amber-400" style="grid-column: 6; grid-row: 2 / 3;"><span class="item-title">Wake Up</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 6; grid-row: 3 / 5;" data-type="study"><span class="item-title">Study</span><span class="item-details">2h Session</span></div>
+            <div class="schedule-item bg-emerald-500" style="grid-column: 6; grid-row: 5 / 8;" data-type="programming"><span class="item-title">Programming</span><span class="item-details">3h Session</span></div>
+            <div class="schedule-item bg-orange-500" style="grid-column: 6; grid-row: 8 / 9;"><span class="item-title">Commute</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 6; grid-row: 9 / 11;"><span class="item-title">AM101 (L)</span><span class="item-details">Mathematics-I</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 6; grid-row: 11 / 12;"><span class="item-title">AC101 (L)</span><span class="item-details">Applied Chemistry</span></div>
+            <div class="schedule-item bg-sky-500" style="grid-column: 6; grid-row: 12 / 14;"><span class="item-title">AP101 (Lab)</span><span class="item-details">Physics</span></div>
+            <div class="schedule-item bg-orange-500" style="grid-column: 6; grid-row: 14 / 15;"><span class="item-title">Commute</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 6; grid-row: 15 / 16;"><span class="item-title">Dinner</span></div>
+            <div class="schedule-item bg-emerald-500" style="grid-column: 6; grid-row: 16 / 17;" data-type="programming"><span class="item-title">Programming</span><span class="item-details">1h Session</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 6; grid-row: 17 / 18;" data-type="study"><span class="item-title">Study</span><span class="item-details">1h Session</span></div>
+            <div class="schedule-item bg-slate-400" style="grid-column: 6; grid-row: 18 / 19;"><span class="item-title">Wind Down</span></div>
+            <div class="schedule-item bg-slate-700" style="grid-column: 6; grid-row: 19 / 20;"><span class="item-title">Sleep</span></div>
+            
+            <div class="schedule-item bg-amber-400" style="grid-column: 7; grid-row: 3 / 5;"><span class="item-title">Wake Up</span><span class="item-details">Leisurely Breakfast</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 7; grid-row: 5 / 8;" data-type="study"><span class="item-title">Study Catch-up</span><span class="item-details">3h Session</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 7; grid-row: 8 / 9;"><span class="item-title">Lunch</span></div>
+            <div class="schedule-item bg-emerald-500" style="grid-column: 7; grid-row: 9 / 12;" data-type="programming"><span class="item-title">Programming Catch-up</span><span class="item-details">3h Session</span></div>
+            <div class="schedule-item bg-rose-400" style="grid-column: 7; grid-row: 12 / 16;"><span class="item-title">Free Time</span><span class="item-details">Relax, Socialize</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 7; grid-row: 16 / 17;"><span class="item-title">Dinner</span></div>
+            <div class="schedule-item bg-rose-400" style="grid-column: 7; grid-row: 17 / 18;"><span class="item-title">Free Time</span><span class="item-details">Hobbies</span></div>
+            <div class="schedule-item bg-slate-400" style="grid-column: 7; grid-row: 18 / 19;"><span class="item-title">Wind Down</span></div>
+            <div class="schedule-item bg-slate-700" style="grid-column: 7; grid-row: 19 / 20;"><span class="item-title">Sleep</span></div>
+
+            <div class="schedule-item bg-amber-400" style="grid-column: 8; grid-row: 3 / 5;"><span class="item-title">Wake Up</span><span class="item-details">Leisurely Breakfast</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 8; grid-row: 5 / 8;" data-type="study"><span class="item-title">Study Catch-up</span><span class="item-details">3h Session</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 8; grid-row: 8 / 9;"><span class="item-title">Lunch</span></div>
+            <div class="schedule-item bg-indigo-500" style="grid-column: 8; grid-row: 9 / 11;" data-type="study"><span class="item-title">Week Prep</span><span class="item-details">2h Study</span></div>
+            <div class="schedule-item bg-rose-400" style="grid-column: 8; grid-row: 11 / 13;"><span class="item-title">Free Time</span><span class="item-details">Relax</span></div>
+            <div class="schedule-item bg-emerald-500" style="grid-column: 8; grid-row: 13 / 16;" data-type="programming"><span class="item-title">Programming</span><span class="item-details">3h Session</span></div>
+            <div class="schedule-item bg-amber-400" style="grid-column: 8; grid-row: 16 / 17;"><span class="item-title">Dinner</span></div>
+            <div class="schedule-item bg-rose-400" style="grid-column: 8; grid-row: 17 / 18;"><span class="item-title">Free Time</span><span class="item-details">Family Time</span></div>
+            <div class="schedule-item bg-slate-400" style="grid-column: 8; grid-row: 18 / 19;"><span class="item-title">Wind Down</span></div>
+            <div class="schedule-item bg-slate-700" style="grid-column: 8; grid-row: 19 / 20;"><span class="item-title">Sleep</span></div>
+            
+            <div id="currentTimeIndicator" class="absolute h-0.5 bg-red-600 z-20 pointer-events-none" style="display: none;">
+                <div class="absolute w-2.5 h-2.5 bg-red-600 rounded-full -left-1.5 -top-1"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="aiPlannerModal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">
+        <div class="modal-content bg-white rounded-lg shadow-2xl w-full max-w-md p-6 transform scale-95">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="modalTitle" class="text-2xl font-bold">Plan Your Session</h2>
+                <button id="closeModal" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </div>
+            <div id="modalInputSection">
+                <div class="mb-4">
+                    <label id="inputLabel1" for="textInput1" class="block text-sm font-medium text-gray-700 mb-1"></label>
+                    <input type="text" id="textInput1" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div class="mb-4">
+                    <label id="inputLabel2" for="textInput2" class="block text-sm font-medium text-gray-700 mb-1"></label>
+                    <textarea id="textInput2" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                </div>
+                <button id="generatePlanBtn" class="w-full bg-indigo-600 text-white font-bold py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                    ✨ Generate Plan
+                </button>
+            </div>
+            <div id="modalResultSection" class="hidden">
+                <div id="loader" class="loader mx-auto my-8 hidden"></div>
+                <div id="planResult" class="text-gray-700 bg-gray-100 p-4 rounded-md whitespace-pre-wrap max-h-64 overflow-y-auto"></div>
+                 <button id="backToInputBtn" class="mt-4 w-full bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-150 ease-in-out">
+                    Back
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="addAssignmentModal" class="modal fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">
+        <div class="modal-content bg-white rounded-lg shadow-2xl w-full max-w-lg p-6 transform scale-95">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold">Add New Assignment</h2>
+                <button id="closeAddAssignmentModal" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="taskInput" class="block text-sm font-medium text-gray-700 mb-1">Assignment</label>
+                    <input type="text" id="taskInput" placeholder="Enter assignment description..." class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label for="deadlineInput" class="block text-sm font-medium text-gray-700 mb-1">Deadline</label>
+                    <input type="date" id="deadlineInput" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+            </div>
+            <button id="addTaskBtn" class="mt-4 w-full bg-emerald-600 text-white font-bold py-2 px-4 rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition duration-150 ease-in-out">
+                Add Assignment
+            </button>
+        </div>
+    </div>
+    
+    <div id="dailyTasksPanel" class="fixed top-0 right-0 h-full w-80 bg-white shadow-lg transform translate-x-full transition-transform duration-300 ease-in-out z-50">
+        <div class="p-4 border-b flex justify-between items-center">
+            <div>
+                <h3 class="text-lg font-bold">Today's Tasks</h3>
+                <p id="currentDate" class="text-sm text-gray-500"></p>
+            </div>
+            <button id="closeTasksPanel" class="text-gray-500 hover:text-gray-800 text-2xl">&times;</button>
+        </div>
+        <div class="p-4">
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="dailyTaskInput" placeholder="Add a new task..." class="flex-grow px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                <button id="addDailyTaskBtn" class="bg-indigo-600 text-white font-bold p-2 rounded-md hover:bg-indigo-700 flex-shrink-0">Add</button>
+            </div>
+            <ul id="dailyTasksList" class="space-y-2 max-h-[calc(100vh-150px)] overflow-y-auto">
+                </ul>
+        </div>
+    </div>
+    <div id="tasksPanelOverlay" class="fixed inset-0 bg-black bg-opacity-40 z-40 hidden"></div>
+
+    <button id="openTasksPanelBtn" class="fixed right-0 top-1/2 -translate-y-1/2 bg-indigo-600 text-white p-3 rounded-l-lg shadow-lg z-30 hover:bg-indigo-700 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+        </svg>
+    </button>
+    
+    <script type="module">
+        // Import Firebase functions from the modern SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getDatabase, ref, onValue, push, remove, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- Your web app's Firebase configuration ---
+            const firebaseConfig = {
+                apiKey: "AIzaSyCsP2aHUKpSIm52Rkamk4ccj7OZc-hf5iU",
+                authDomain: "scheduler-8cf70.firebaseapp.com",
+                databaseURL: "https://scheduler-8cf70-default-rtdb.asia-southeast1.firebasedatabase.app",
+                projectId: "scheduler-8cf70",
+                storageBucket: "scheduler-8cf70.appspot.com",
+                messagingSenderId: "155072915370",
+                appId: "1:155072915370:web:fcbbf94e15a6af37a3add3",
+                measurementId: "G-KJPNTEMZW7"
+            };
+            
+            // Initialize Firebase
+            const app = initializeApp(firebaseConfig);
+            const database = getDatabase(app);
+
+
+            // --- Modal Handling ---
+            const modal = document.getElementById('aiPlannerModal');
+            const closeModalBtn = document.getElementById('closeModal');
+            const scheduleItems = document.querySelectorAll('.schedule-item[data-type]');
+            
+            const modalTitle = document.getElementById('modalTitle');
+            const inputLabel1 = document.getElementById('inputLabel1');
+            const textInput1 = document.getElementById('textInput1');
+            const inputLabel2 = document.getElementById('inputLabel2');
+            const textInput2 = document.getElementById('textInput2');
+            const generatePlanBtn = document.getElementById('generatePlanBtn');
+            const backToInputBtn = document.getElementById('backToInputBtn');
+            
+            const modalInputSection = document.getElementById('modalInputSection');
+            const modalResultSection = document.getElementById('modalResultSection');
+            const loader = document.getElementById('loader');
+            const planResult = document.getElementById('planResult');
+
+            let currentSessionType = '';
+
+            const openModal = (type) => {
+                currentSessionType = type;
+                modalInputSection.classList.remove('hidden');
+                modalResultSection.classList.add('hidden');
+                loader.classList.add('hidden');
+                planResult.textContent = '';
+                textInput1.value = '';
+                textInput2.value = '';
+
+                if (type === 'study') {
+                    modalTitle.textContent = 'Plan Your Study Session';
+                    inputLabel1.textContent = 'What subject are you studying?';
+                    textInput1.placeholder = 'e.g., Mathematics-I, Physics';
+                    inputLabel2.textContent = 'What topics have you covered recently?';
+                    textInput2.placeholder = 'e.g., Derivatives, Newton\'s Laws';
+                } else if (type === 'programming') {
+                    modalTitle.textContent = 'Plan Your Programming Session';
+                    inputLabel1.textContent = 'What is your main goal?';
+                    textInput1.placeholder = 'e.g., Learn data structures, Practice algorithms';
+                    inputLabel2.textContent = 'Any specific technologies or topics?';
+                    textInput2.placeholder = 'e.g., React, Python, Sorting algorithms';
+                }
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                    modal.querySelector('.modal-content').classList.remove('scale-95');
+                }, 10);
+            };
+
+            const closeModal = () => {
+                modal.classList.add('opacity-0');
+                modal.querySelector('.modal-content').classList.add('scale-95');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            };
+
+            scheduleItems.forEach(item => {
+                item.addEventListener('click', () => {
+                    const type = item.getAttribute('data-type');
+                    if (type) {
+                        openModal(type);
+                    }
+                });
+            });
+
+            closeModalBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+            backToInputBtn.addEventListener('click', () => {
+                modalResultSection.classList.add('hidden');
+                modalInputSection.classList.remove('hidden');
+            });
+
+            // --- Assignment Management (Firebase Modular SDK) ---
+            const addAssignmentModal = document.getElementById('addAssignmentModal');
+            const openAddAssignmentModalBtn = document.getElementById('openAddAssignmentModalBtn');
+            const closeAddAssignmentModalBtn = document.getElementById('closeAddAssignmentModal');
+            const addTaskBtn = document.getElementById('addTaskBtn');
+            const taskInput = document.getElementById('taskInput');
+            const deadlineInput = document.getElementById('deadlineInput');
+            const assignmentsContent = document.getElementById('assignmentsContent');
+            const urgentTab = document.getElementById('urgentTab');
+            const allTab = document.getElementById('allTab');
+            
+            let currentView = 'urgent';
+            const assignmentsDbRef = ref(database, 'assignments');
+
+            const openAddAssignmentModal = () => {
+                addAssignmentModal.classList.remove('hidden');
+                setTimeout(() => {
+                    addAssignmentModal.classList.remove('opacity-0');
+                    addAssignmentModal.querySelector('.modal-content').classList.remove('scale-95');
+                }, 10);
+            };
+
+            const closeAddAssignmentModal = () => {
+                addAssignmentModal.classList.add('opacity-0');
+                addAssignmentModal.querySelector('.modal-content').classList.add('scale-95');
+                setTimeout(() => addAssignmentModal.classList.add('hidden'), 300);
+            };
+            
+            const renderAssignments = (allAssignments) => {
+                assignmentsContent.innerHTML = '';
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const threeDaysFromNow = new Date(today);
+                threeDaysFromNow.setDate(today.getDate() + 3);
+
+                const sortedAssignments = [...allAssignments].sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+                
+                let assignmentsToRender = sortedAssignments;
+                if (currentView === 'urgent') {
+                    assignmentsToRender = sortedAssignments.filter(assignment => {
+                        const deadline = new Date(assignment.deadline + 'T00:00:00');
+                        return deadline >= today && deadline <= threeDaysFromNow;
+                    });
+                }
+
+                if (assignmentsToRender.length === 0) {
+                    assignmentsContent.innerHTML = `<p class="text-gray-500 text-center py-4">No assignments in this view.</p>`;
+                    return;
+                }
+
+                const list = document.createElement('ul');
+                list.className = 'space-y-2';
+                assignmentsToRender.forEach(assignment => {
+                    const li = document.createElement('li');
+                    li.className = 'p-3 border rounded-md flex justify-between items-center bg-gray-50';
+                    li.innerHTML = `
+                        <div>
+                            <span class="font-medium">${assignment.description}</span>
+                            <div class="text-sm text-gray-600">
+                                Deadline: ${new Date(assignment.deadline + 'T00:00:00').toLocaleDateString()}
+                            </div>
+                        </div>
+                        <button class="delete-assignment-btn text-red-500 hover:text-red-700 font-bold text-xl" data-id="${assignment.id}">&times;</button>
+                    `;
+                    list.appendChild(li);
+                });
+                assignmentsContent.appendChild(list);
+            };
+            
+            // Listen for changes in assignments data
+            onValue(assignmentsDbRef, (snapshot) => {
+                const data = snapshot.val();
+                const allAssignments = [];
+                if (data) {
+                    for (const id in data) {
+                        allAssignments.push({ id, ...data[id] });
+                    }
+                }
+                renderAssignments(allAssignments);
+            });
+
+            assignmentsContent.addEventListener('click', (e) => {
+                if (e.target.classList.contains('delete-assignment-btn')) {
+                    const idToDelete = e.target.getAttribute('data-id');
+                    if(idToDelete) {
+                        remove(ref(database, 'assignments/' + idToDelete));
+                    }
+                }
+            });
+
+            addTaskBtn.addEventListener('click', () => {
+                const description = taskInput.value.trim();
+                const deadline = deadlineInput.value;
+                if (description && deadline) {
+                    push(assignmentsDbRef, { description, deadline });
+                    taskInput.value = '';
+                    deadlineInput.value = '';
+                    closeAddAssignmentModal();
+                }
+            });
+            
+            const refreshAssignmentsWithFilter = () => {
+                get(assignmentsDbRef).then((snapshot) => {
+                    const data = snapshot.val();
+                    const allAssignments = [];
+                    if (data) {
+                        for (const id in data) {
+                            allAssignments.push({ id, ...data[id] });
+                        }
+                    }
+                    renderAssignments(allAssignments);
+                });
+            };
+
+            urgentTab.addEventListener('click', () => {
+                currentView = 'urgent';
+                urgentTab.classList.add('active');
+                allTab.classList.remove('active');
+                refreshAssignmentsWithFilter();
+            });
+
+            allTab.addEventListener('click', () => {
+                currentView = 'all';
+                allTab.classList.add('active');
+                urgentTab.classList.remove('active');
+                refreshAssignmentsWithFilter();
+            });
+
+            openAddAssignmentModalBtn.addEventListener('click', openAddAssignmentModal);
+            closeAddAssignmentModalBtn.addEventListener('click', closeAddAssignmentModal);
+            addAssignmentModal.addEventListener('click', (e) => {
+                if (e.target === addAssignmentModal) {
+                    closeAddAssignmentModal();
+                }
+            });
+            
+            // --- Gemini API Call ---
+            generatePlanBtn.addEventListener('click', async () => {
+                const input1 = textInput1.value.trim();
+                const input2 = textInput2.value.trim();
+
+                if (!input1) {
+                    alert("The first input field cannot be empty."); return;
+                }
+
+                modalInputSection.classList.add('hidden');
+                modalResultSection.classList.remove('hidden');
+                loader.classList.remove('hidden');
+                planResult.textContent = '';
+
+                let prompt = '';
+                if (currentSessionType === 'study') {
+                    prompt = `You are an expert academic tutor. A student is studying "${input1}". They have recently covered these topics: "${input2}". Generate a focused, actionable study plan for a 1-2 hour session. Break it down into timed activities. Make it encouraging and clear.`;
+                } else if (currentSessionType === 'programming') {
+                    prompt = `You are a senior software engineer mentoring a student. Their goal for this programming session is "${input1}" with a focus on "${input2}". Create a detailed, actionable plan for a 1-2 hour coding session. Suggest specific tasks, problems, or concepts to work on. Be motivating and provide practical steps.`;
+                }
+
+                try {
+                    // NOTE: Add your Gemini API Key here for this to work
+                    const generatedPlan = await callGemini(prompt);
+                    planResult.textContent = generatedPlan;
+                } catch (error) {
+                    console.error('Error calling Gemini API:', error);
+                    planResult.textContent = 'Sorry, I couldn\'t generate a plan right now. Please check your API key and try again.';
+                } finally {
+                    loader.classList.add('hidden');
+                }
+            });
+            
+            async function callGemini(prompt, retries = 3, delay = 1000) {
+                const apiKey = "AIzaSyBE2RYckmVb4DE22BiPKiBsHe-I65PNGhU"; // <-- IMPORTANT: PASTE YOUR GEMINI API KEY HERE
+                if (!apiKey) {
+                    throw new Error("Gemini API key is missing.");
+                }
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+                const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        const response = await fetch(apiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                        const result = await response.json();
+                        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+                            return result.candidates[0].content.parts[0].text;
+                        } else {
+                             throw new Error('Invalid response structure from Gemini API. It might be a billing or permissions issue.');
+                        }
+                    } catch (error) {
+                        if (i === retries - 1) throw error;
+                        await new Promise(res => setTimeout(res, delay * Math.pow(2, i)));
+                    }
+                }
+            }
+            
+            // --- Daily Tasks Management (Firebase Modular SDK) ---
+            const openTasksPanelBtn = document.getElementById('openTasksPanelBtn');
+            const dailyTasksPanel = document.getElementById('dailyTasksPanel');
+            const closeTasksPanelBtn = document.getElementById('closeTasksPanel');
+            const tasksPanelOverlay = document.getElementById('tasksPanelOverlay');
+            const currentDateEl = document.getElementById('currentDate');
+            const dailyTaskInput = document.getElementById('dailyTaskInput');
+            const addDailyTaskBtn = document.getElementById('addDailyTaskBtn');
+            const dailyTasksList = document.getElementById('dailyTasksList');
+
+            const getTodayKey = () => {
+                const today = new Date();
+                return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+            };
+            
+            const todayKey = getTodayKey();
+            const dailyTasksDbRef = ref(database, 'dailyTasks/' + todayKey);
+
+            const openTasksPanel = () => {
+                dailyTasksPanel.classList.remove('translate-x-full');
+                tasksPanelOverlay.classList.remove('hidden');
+            };
+
+            const closeTasksPanel = () => {
+                dailyTasksPanel.classList.add('translate-x-full');
+                tasksPanelOverlay.classList.add('hidden');
+            };
+
+            const renderDailyTasks = (tasksData) => {
+                dailyTasksList.innerHTML = '';
+
+                if (!tasksData) {
+                    dailyTasksList.innerHTML = `<li class="text-gray-500 text-center py-4">No tasks for today.</li>`;
+                    return;
+                }
+
+                Object.entries(tasksData).forEach(([taskId, taskText]) => {
+                    const li = document.createElement('li');
+                    li.className = 'p-2 border rounded-md flex justify-between items-center bg-gray-50 text-sm';
+                    li.innerHTML = `
+                        <span class="pr-2">${taskText}</span>
+                        <button class="delete-daily-task-btn text-red-400 hover:text-red-600 font-bold text-xl flex-shrink-0" data-id="${taskId}">&times;</button>
+                    `;
+                    dailyTasksList.appendChild(li);
+                });
+            };
+            
+            // Listen for changes in today's tasks
+            onValue(dailyTasksDbRef, (snapshot) => {
+                renderDailyTasks(snapshot.val());
+            });
+            
+            const addDailyTaskAction = () => {
+                 const taskText = dailyTaskInput.value.trim();
+                if (taskText) {
+                    push(dailyTasksDbRef, taskText);
+                    dailyTaskInput.value = '';
+                }
+            };
+
+            openTasksPanelBtn.addEventListener('click', openTasksPanel);
+            closeTasksPanelBtn.addEventListener('click', closeTasksPanel);
+            tasksPanelOverlay.addEventListener('click', closeTasksPanel);
+            addDailyTaskBtn.addEventListener('click', addDailyTaskAction);
+            dailyTaskInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    addDailyTaskAction();
+                }
+            });
+
+            dailyTasksList.addEventListener('click', (e) => {
+                if (e.target.classList.contains('delete-daily-task-btn')) {
+                    const taskId = e.target.getAttribute('data-id');
+                    if (taskId) {
+                       remove(ref(database, 'dailyTasks/' + todayKey + '/' + taskId));
+                    }
+                }
+            });
+
+            currentDateEl.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+
+
+            // --- Current Time Indicator ---
+            const timeIndicator = document.getElementById('currentTimeIndicator');
+            const gridForTime = document.querySelector('.timetable-grid');
+            
+            function updateTimeIndicator() {
+                if (!gridForTime || !timeIndicator) return;
+
+                const now = new Date();
+                const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday
+                const hours = now.getHours();
+                const minutes = now.getMinutes();
+
+                const dayHeaders = gridForTime.querySelectorAll('.day-header');
+                const dayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Mon=0, Tue=1, ..., Sun=6
+                const currentDayHeader = dayHeaders[dayIndex];
+
+                if (!currentDayHeader || hours < 6 || hours >= 24) {
+                    timeIndicator.style.display = 'none';
+                    return;
+                }
+
+                timeIndicator.style.display = 'block';
+
+                const headerRowHeight = 40;
+                const hourRowHeight = 50;
+                const gap = 2;
+                const minutesPast6AM = (hours - 6) * 60 + minutes;
+                const topOffset = (minutesPast6AM / 60) * (hourRowHeight + gap);
+                const verticalPosition = headerRowHeight + gap + topOffset;
+
+                const horizontalPosition = currentDayHeader.offsetLeft;
+                const columnWidth = currentDayHeader.offsetWidth;
+
+                timeIndicator.style.top = `${verticalPosition}px`;
+                timeIndicator.style.left = `${horizontalPosition}px`;
+                timeIndicator.style.width = `${columnWidth}px`;
+            }
+
+            updateTimeIndicator();
+            setInterval(updateTimeIndicator, 60000);
+            window.addEventListener('resize', updateTimeIndicator);
+        });
+    </script>
+</body>
+</html>
